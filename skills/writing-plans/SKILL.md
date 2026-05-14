@@ -7,7 +7,7 @@ description: Use when you have a spec or requirements for a multi-step task, bef
 
 ## Overview
 
-Write comprehensive implementation plans assuming the engineer has zero context for our codebase and questionable taste. Document everything they need to know: which files to touch for each task, code, testing, docs they might need to check, how to test it. Give them the whole plan as bite-sized tasks. DRY. YAGNI. TDD. Frequent commits.
+Write comprehensive implementation plans assuming the engineer has zero context for our codebase and questionable taste. Document everything they need to know: which files to touch for each task, code, testing, docs they might need to check, how to test it. Give them the whole plan as bite-sized tasks. DRY. YAGNI. Frequent commits.
 
 Assume they are a skilled developer, but know almost nothing about our toolset or problem domain. Assume they don't know good test design very well.
 
@@ -21,6 +21,10 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 ## Scope Check
 
 If the spec covers multiple independent subsystems, it should have been broken into sub-project specs during brainstorming. If it wasn't, suggest breaking this into separate plans — one per subsystem. Each plan should produce working, testable software on its own.
+
+If the spec is a single system but can broken down into some components, you should consider the parallel-development approach. Compare two approaches: 
+1. Linear plan - each step of the plan depends on the previous one; dispatch & execute the plan topdown
+2. Parallel plan - make a multiple step plan, but a single step can be broken down into multiple substep which are mutually exclusive so they can execute with each other
 
 ## File Structure
 
@@ -36,10 +40,9 @@ This structure informs the task decomposition. Each task should produce self-con
 ## Bite-Sized Task Granularity
 
 **Each step is one action (2-5 minutes):**
-- "Write the failing test" - step
-- "Run it to make sure it fails" - step
-- "Implement the minimal code to make the test pass" - step
-- "Run the tests and make sure they pass" - step
+- "Implement the code" - step
+- "Revise the code & find out points to refactor" - step
+- "Fix the found points" - step
 - "Commit" - step
 
 ## Plan Document Header
@@ -68,37 +71,17 @@ This structure informs the task decomposition. Each task should produce self-con
 **Files:**
 - Create: `exact/path/to/file.py`
 - Modify: `exact/path/to/existing.py:123-145`
-- Test: `tests/exact/path/to/test.py`
 
-- [ ] **Step 1: Write the failing test**
-
-```python
-def test_specific_behavior():
-    result = function(input)
-    assert result == expected
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `pytest tests/path/test.py::test_name -v`
-Expected: FAIL with "function not defined"
-
-- [ ] **Step 3: Write minimal implementation**
+- [ ] Write minimal implementation**
 
 ```python
 def function(input):
     return expected
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
-
-Run: `pytest tests/path/test.py::test_name -v`
-Expected: PASS
-
-- [ ] **Step 5: Commit**
+- [ ] **Commit**
 
 ```bash
-git add tests/path/test.py src/path/file.py
 git commit -m "feat: add specific feature"
 ```
 ````
@@ -109,15 +92,21 @@ Every step must contain the actual content an engineer needs. These are **plan f
 - "TBD", "TODO", "implement later", "fill in details"
 - "Add appropriate error handling" / "add validation" / "handle edge cases"
 - "Write tests for the above" (without actual test code)
-- "Similar to Task N" (repeat the code — the engineer may be reading tasks out of order)
+- "Similar to Task N" (the engineer may be reading tasks out of order)
 - Steps that describe what to do without showing how (code blocks required for code steps)
-- References to types, functions, or methods not defined in any task
+- References to types, functions, or methods not defined in any tas
 
 ## Remember
 - Exact file paths always
 - Complete code in every step — if a step changes code, show the code
 - Exact commands with expected output
-- DRY, YAGNI, TDD, frequent commits
+- DRY, YAGNI, frequent commits
+
+## Code convention
+
+This plan is not the actual code, but the plan that describes the possible implementation. 
+- You can use pseudo-code if you want. If you use pseudo-code, make sure that it is self-contained(concrete enough).
+- Repetitive implementation can be omitted if you provide concrete enough information.
 
 ## Self-Review
 
@@ -137,16 +126,18 @@ After saving the plan, offer execution choice:
 
 **"Plan complete and saved to `docs/superpowers/plans/<filename>.md`. Two execution options:**
 
-**1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration
+**1. Subagent-Driven - Linear** - I dispatch a fresh subagent per task, review between tasks, fast iteration
 
-**2. Inline Execution** - Execute tasks in this session using executing-plans, batch execution with checkpoints
+**2. Subagent-Driven - Parallel** - I dispatch multiple subagents that simulatenously handle jobs, and review once at the end
 
 **Which approach?"**
 
-**If Subagent-Driven chosen:**
+**If Linear chosen:**
 - **REQUIRED SUB-SKILL:** Use superpowers:subagent-driven-development
 - Fresh subagent per task + two-stage review
 
-**If Inline Execution chosen:**
-- **REQUIRED SUB-SKILL:** Use superpowers:executing-plans
-- Batch execution with checkpoints for review
+**If Parallel chosen:**
+- **REQUIRED SUB-SKILL:** Use superpowers:dispatching-parallel-agents
+- Make sure that you check what jobs can be ran in parallel
+
+Make sure that you pick a single recommendation and show it to the user. 
