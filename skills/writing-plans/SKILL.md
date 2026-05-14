@@ -75,30 +75,31 @@ This structure informs the task decomposition. Each task should produce self-con
 - [ ] Write minimal implementation**
 
 ```python
-def function(input):
+def return_fibonacci_add_one(input):
+    # Write down the logic that computes input-th fiboanacci number and store it to t
+    t = t + 1
     return expected
 ```
 
 - [ ] **Commit**
 
 ```bash
-git commit -m "feat: add specific feature"
+git commit -m "feat: add fibonacci add one computing method"
 ```
 ````
 
 ## No Placeholders
 
 Every step must contain the actual content an engineer needs. These are **plan failures** — never write them:
-- "TBD", "TODO", "implement later", "fill in details"
+- "TBD", "TODO"
 - "Add appropriate error handling" / "add validation" / "handle edge cases"
 - "Write tests for the above" (without actual test code)
 - "Similar to Task N" (the engineer may be reading tasks out of order)
-- Steps that describe what to do without showing how (code blocks required for code steps)
+- Steps that describe what to do without showing how (at least psuedo-code or concrete explanation is required)
 - References to types, functions, or methods not defined in any tas
 
 ## Remember
 - Exact file paths always
-- Complete code in every step — if a step changes code, show the code
 - Exact commands with expected output
 - DRY, YAGNI, frequent commits
 
@@ -106,7 +107,31 @@ Every step must contain the actual content an engineer needs. These are **plan f
 
 This plan is not the actual code, but the plan that describes the possible implementation. 
 - You can use pseudo-code if you want. If you use pseudo-code, make sure that it is self-contained(concrete enough).
+- Make sure that you specify the scope. You should give a well-defined box if you want to make subagent to fill it. 
 - Repetitive implementation can be omitted if you provide concrete enough information.
+
+### What's OK (Example)
+
+You should implement a method that implements path-finding logic with Dijkstra's algorithm.
+- Signature: `int dijkstra(Graph &G, Distance &D, int start, int goal)` 
+- Use `std::priority_queue<std::pair<int,int>` and `std::greater<pair<int,int>>` for the comparison.
+Psuedo-code: 
+1. Define a priority queue with above type
+2. Put a start vertex in the queue
+3. Repeat retrieving mininum-distance vertex from the queue and update
+4. Return the answer.
+
+### What's not OK (Example)
+
+You should implement pathfinding algorithm.
+- Use Dijkstra.
+- Get start/end vertices and use them.
+
+---
+
+This is not okay because: 
+- At least one of these are required: 1) Psuedo-code or 2) Concrete explanation. This code contains neither.
+- The scope is ambigious(no signature, no sufficient explanation). Subagent will very likely to escape the box.
 
 ## Self-Review
 
