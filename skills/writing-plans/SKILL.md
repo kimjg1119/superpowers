@@ -40,7 +40,7 @@ This structure informs the task decomposition. Each task should produce self-con
 ## Bite-Sized Task Granularity
 
 **Each step is one action (2-5 minutes):**
-- "Implement the code" - step
+- "Implement the psuedo code" - step
 - "Revise the code & find out points to refactor" - step
 - "Fix the found points" - step
 - "Commit" - step
@@ -105,7 +105,7 @@ Every step must contain the actual content an engineer needs. These are **plan f
 
 ## Code convention
 
-This plan is not the actual code, but the plan that describes the possible implementation. 
+This is a PLAN. You should not write a full code. If we wanted such approach, the user is likely to ask you directly edit the code, not planning. 
 - You can use pseudo-code if you want. If you use pseudo-code, make sure that it is self-contained(concrete enough).
 - Make sure that you specify the scope. You should give a well-defined box if you want to make subagent to fill it. 
 - Repetitive implementation can be omitted if you provide concrete enough information.
