@@ -7,7 +7,7 @@ description: Use when you have a spec or requirements for a multi-step task, bef
 
 ## Overview
 
-Write comprehensive implementation plans assuming the engineer has zero context for our codebase and questionable taste. Document everything they need to know: which files to touch for each task, code, testing, docs they might need to check, how to test it. Give them the whole plan as bite-sized tasks. DRY. YAGNI. Frequent commits.
+Write comprehensive implementation plans assuming the engineer has zero context for our codebase and questionable taste. Document everything they need to know: which files to touch for each task, code, testing, docs they might need to check, how to test it. Give them the whole plan as bite-sized tasks. DRY. YAGNI. Frequent commits. Write down in Korean(한국어 계획을 생성하세요). 
 
 Assume they are a skilled developer, but know almost nothing about our toolset or problem domain. Assume they don't know good test design very well.
 
@@ -15,7 +15,7 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **Context:** If working in an isolated worktree, it should have been created via the `superpowers:using-git-worktrees` skill at execution time.
 
-**Save plans to:** `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`
+**Save plans to:** `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`, do not commit this plan file. 
 - (User preferences for plan location override this default)
 
 ## Scope Check
@@ -25,6 +25,15 @@ If the spec covers multiple independent subsystems, it should have been broken i
 If the spec is a single system but can broken down into some components, you should consider the parallel-development approach. Compare two approaches: 
 1. Linear plan - each step of the plan depends on the previous one; dispatch & execute the plan topdown
 2. Parallel plan - make a multiple step plan, but a single step can be broken down into multiple substep which are mutually exclusive so they can execute with each other
+
+This should be determined before you write the plan. 
+Offer execution choice to user with your recommendation. 
+
+**Two execution options:**
+
+**1. Subagent-Driven - Linear** - I dispatch a fresh subagent per task, review between tasks, fast iteration
+
+**2. Subagent-Driven - Parallel** - I dispatch multiple subagents that simulatenously handle jobs, and review once at the end
 
 ## File Structure
 
@@ -71,6 +80,10 @@ This structure informs the task decomposition. Each task should produce self-con
 **Files:**
 - Create: `exact/path/to/file.py`
 - Modify: `exact/path/to/existing.py:123-145`
+
+**Dependencies:**
+Depends on task A, B, and C.
+This can be executed parallel with the task D.
 
 - [ ] Write minimal implementation**
 
@@ -146,14 +159,6 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
 
 ## Execution Handoff
-
-After saving the plan, offer execution choice:
-
-**"Plan complete and saved to `docs/superpowers/plans/<filename>.md`. Two execution options:**
-
-**1. Subagent-Driven - Linear** - I dispatch a fresh subagent per task, review between tasks, fast iteration
-
-**2. Subagent-Driven - Parallel** - I dispatch multiple subagents that simulatenously handle jobs, and review once at the end
 
 **Which approach?"**
 
