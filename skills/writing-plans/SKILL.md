@@ -22,18 +22,15 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 If the spec covers multiple independent subsystems, it should have been broken into sub-project specs during brainstorming. If it wasn't, suggest breaking this into separate plans — one per subsystem. Each plan should produce working, testable software on its own.
 
-If the spec is a single system but can broken down into some components, you should consider the parallel-development approach. Compare two approaches: 
-1. Linear plan - each step of the plan depends on the previous one; dispatch & execute the plan topdown
-2. Parallel plan - make a multiple step plan, but a single step can be broken down into multiple substep which are mutually exclusive so they can execute with each other
+## Dependency DAG
 
-This should be determined before you write the plan. 
-Offer execution choice to user with your recommendation. 
+Before defining tasks, identify every task and the artifacts each one produces. For each task, list which earlier tasks' artifacts it depends on. Use these edges to build a **DAG** (directed acyclic graph) over the tasks.
 
-**Two execution options:**
+- If you find a cycle, your decomposition is wrong — go back and split or merge tasks until the dependencies form a DAG.
+- **Tasks that can be ready at the same time MUST modify disjoint sets of files.** If two tasks that could become ready concurrently would touch the same file, add a dependency edge to serialize them. Concurrent lanes touching the same file are a plan defect, not an executor problem.
+- A purely linear chain (T1 → T2 → T3) is a valid DAG. The executor will simply have a ready-set of size 1 each round. There is no separate "linear" mode.
 
-**1. Subagent-Driven - Linear** - I dispatch a fresh subagent per task, review between tasks, fast iteration
-
-**2. Subagent-Driven - Parallel** - I dispatch multiple subagents that simulatenously handle jobs, and review once at the end
+The DAG is then expressed in two complementary forms in the plan document: a Mermaid diagram in the header (overview) and explicit `Depends on:` fields on each task (per-task ground truth). Both must agree.
 
 ## File Structure
 
@@ -69,23 +66,33 @@ This structure informs the task decomposition. Each task should produce self-con
 
 **Tech Stack:** [Key technologies/libraries]
 
+## Dependency Graph
+
+```mermaid
+graph TD
+  T1[T1: short label] --> T3
+  T2[T2: short label] --> T3
+  T3[T3: short label] --> T4
+```
+
+The edges in this diagram MUST exactly match the `Depends on:` fields in each task below. Node IDs in the diagram are the same task IDs used in task headers.
+
 ---
 ```
 
 ## Task Structure
 
 ````markdown
-### Task N: [Component Name]
+### Task TN: [Component Name]
+
+**ID:** TN
+**Depends on:** [TA, TB, TC]
 
 **Files:**
 - Create: `exact/path/to/file.py`
 - Modify: `exact/path/to/existing.py:123-145`
 
-**Dependencies:**
-Depends on task A, B, and C.
-This can be executed parallel with the task D.
-
-- [ ] Write minimal implementation**
+- [ ] Write minimal implementation
 
 ```python
 def return_fibonacci_add_one(input):
@@ -100,6 +107,12 @@ def return_fibonacci_add_one(input):
 git commit -m "feat: add fibonacci add one computing method"
 ```
 ````
+
+Rules:
+- `ID:` must be unique across the plan and must match a node ID in the Mermaid Dependency Graph at the top.
+- `Depends on:` is a list of other task IDs. Use `[]` for tasks with no dependencies — these become ready immediately in the first round.
+- The set of edges across all `Depends on:` fields MUST exactly match the edges in the Mermaid diagram.
+- Tasks with overlapping file scopes MUST have a dependency edge between them (see "Dependency DAG" section above).
 
 ## No Placeholders
 
@@ -160,14 +173,9 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
 
 ## Execution Handoff
 
-**Which approach?"**
+**REQUIRED SUB-SKILL:** Use `superpowers:subagent-driven-development`.
 
-**If Linear chosen:**
-- **REQUIRED SUB-SKILL:** Use superpowers:subagent-driven-development
-- Fresh subagent per task + two-stage review
+The plan's DAG defines parallelizable ready-sets. The executor parses the DAG, computes the ready-set each round, and dispatches all ready tasks concurrently as independent lanes. Each lane runs the standard per-task pipeline (implementer → spec reviewer → code quality reviewer) internally serial. When any lane finishes, the executor recomputes the ready-set immediately (eager recomputation) so newly-unblocked tasks start without waiting for the rest of the current round.
 
-**If Parallel chosen:**
-- **REQUIRED SUB-SKILL:** Use superpowers:dispatching-parallel-agents
-- Make sure that you check what jobs can be ran in parallel
+There is no Linear vs Parallel choice — a linear chain is just a DAG whose ready-set has size 1 each round, and the same skill handles both shapes.
 
-Make sure that you pick a single recommendation and show it to the user. 

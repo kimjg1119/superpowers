@@ -23,6 +23,9 @@ Task tool (general-purpose):
     | Spec Alignment | Plan covers spec requirements, no major scope creep |
     | Task Decomposition | Tasks have clear boundaries, steps are actionable |
     | Buildability | Could an engineer follow this plan without getting stuck? |
+    | DAG Structure | Every task has `ID:` and `Depends on:` fields; IDs are unique; dependencies form a DAG with no cycles |
+    | Mermaid Consistency | The edge set in the header's Mermaid `Dependency Graph` exactly matches the union of all `Depends on:` fields |
+    | File Isolation | Tasks that could be ready at the same time (no dependency path between them) do not modify the same files |
 
     ## Calibration
 
