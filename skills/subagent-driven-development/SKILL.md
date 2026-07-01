@@ -48,10 +48,8 @@ digraph process {
 
     "Read plan, parse DAG (tasks, IDs, depends_on), create TodoWrite" [shape=box];
     "Compute ready-set" [shape=box];
-    "Ready-set empty AND no lanes in flight?" [shape=diamond];
+    "Ready-set empty AND nothing in flight (implementers + reviews)?" [shape=diamond];
     "Dispatch ALL ready tasks concurrently, one lane each" [shape=box];
-    "Any lane finishes" [shape=box];
-    "Mark task complete in TodoWrite" [shape=box];
     "Dispatch final code reviewer subagent for entire implementation" [shape=box];
     "Use superpowers:finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
 
@@ -61,26 +59,31 @@ digraph process {
         "Implementer asks questions?" [shape=diamond];
         "Answer questions, re-dispatch" [shape=box];
         "Implementer implements, tests, commits, self-reviews" [shape=box];
+        "Eager-recompute ready-set (commit unblocks dependents)" [shape=box];
         "Dispatch spec reviewer (./spec-reviewer-prompt.md)" [shape=box];
         "Spec reviewer approves?" [shape=diamond];
         "Implementer fixes spec gaps" [shape=box];
         "Dispatch code quality reviewer (./code-quality-reviewer-prompt.md)" [shape=box];
         "Code quality reviewer approves?" [shape=diamond];
         "Implementer fixes quality issues" [shape=box];
-        "Lane done" [shape=box];
+        "Reviews passed (mark task complete in TodoWrite)" [shape=box];
     }
 
     "Read plan, parse DAG (tasks, IDs, depends_on), create TodoWrite" -> "Compute ready-set";
-    "Compute ready-set" -> "Ready-set empty AND no lanes in flight?";
-    "Ready-set empty AND no lanes in flight?" -> "Dispatch final code reviewer subagent for entire implementation" [label="yes"];
-    "Ready-set empty AND no lanes in flight?" -> "Dispatch ALL ready tasks concurrently, one lane each" [label="no"];
+    "Compute ready-set" -> "Ready-set empty AND nothing in flight (implementers + reviews)?";
+    "Ready-set empty AND nothing in flight (implementers + reviews)?" -> "Dispatch final code reviewer subagent for entire implementation" [label="yes"];
+    "Ready-set empty AND nothing in flight (implementers + reviews)?" -> "Dispatch ALL ready tasks concurrently, one lane each" [label="no"];
     "Dispatch ALL ready tasks concurrently, one lane each" -> "Dispatch implementer subagent (./implementer-prompt.md)";
 
     "Dispatch implementer subagent (./implementer-prompt.md)" -> "Implementer asks questions?";
     "Implementer asks questions?" -> "Answer questions, re-dispatch" [label="yes"];
     "Answer questions, re-dispatch" -> "Dispatch implementer subagent (./implementer-prompt.md)";
     "Implementer asks questions?" -> "Implementer implements, tests, commits, self-reviews" [label="no"];
-    "Implementer implements, tests, commits, self-reviews" -> "Dispatch spec reviewer (./spec-reviewer-prompt.md)";
+
+    "Implementer implements, tests, commits, self-reviews" -> "Eager-recompute ready-set (commit unblocks dependents)";
+    "Eager-recompute ready-set (commit unblocks dependents)" -> "Compute ready-set";
+    "Implementer implements, tests, commits, self-reviews" -> "Dispatch spec reviewer (./spec-reviewer-prompt.md)" [label="review track (concurrent, non-blocking)"];
+
     "Dispatch spec reviewer (./spec-reviewer-prompt.md)" -> "Spec reviewer approves?";
     "Spec reviewer approves?" -> "Implementer fixes spec gaps" [label="no"];
     "Implementer fixes spec gaps" -> "Dispatch spec reviewer (./spec-reviewer-prompt.md)";
@@ -88,11 +91,8 @@ digraph process {
     "Dispatch code quality reviewer (./code-quality-reviewer-prompt.md)" -> "Code quality reviewer approves?";
     "Code quality reviewer approves?" -> "Implementer fixes quality issues" [label="no"];
     "Implementer fixes quality issues" -> "Dispatch code quality reviewer (./code-quality-reviewer-prompt.md)";
-    "Code quality reviewer approves?" -> "Lane done" [label="yes"];
-
-    "Lane done" -> "Any lane finishes";
-    "Any lane finishes" -> "Mark task complete in TodoWrite";
-    "Mark task complete in TodoWrite" -> "Compute ready-set" [label="eager recompute"];
+    "Code quality reviewer approves?" -> "Reviews passed (mark task complete in TodoWrite)" [label="yes"];
+    "Reviews passed (mark task complete in TodoWrite)" -> "Compute ready-set" [label="re-check exit condition"];
 
     "Dispatch final code reviewer subagent for entire implementation" -> "Use superpowers:finishing-a-development-branch";
 }
@@ -100,8 +100,13 @@ digraph process {
 
 ### DAG Execution Principles
 
-- **Lanes run in parallel; each lane is serial.** Inside a single lane, the implementer → spec review → code quality review steps run sequentially. Across lanes, the per-task pipelines run concurrently. There is no parallelism *within* a task — only across independent tasks.
-- **Eager recomputation.** The instant any lane finishes, recompute the ready-set and dispatch any newly-unblocked tasks immediately. Do NOT wait for the rest of the current round to complete — that throws away parallelism the DAG made available.
+- **Lanes run in parallel; each lane is serial.** Inside a single lane, the implementer → spec review → code quality review steps run in order. Across lanes, the per-task pipelines run concurrently. There is no parallelism *within* a task — only across independent tasks.
+- **Implementation commit unblocks dependents — reviews do not gate them.** Spec review and code quality review are not on the critical path. The instant an implementer commits, treat its task as implementation-complete: recompute the ready-set and dispatch any newly-unblocked dependents immediately, *while that task's spec and quality reviews run concurrently*. Dependents build on the committed code, not on the reviewed-and-blessed code. This is the main lever for speed — a passing review rarely changes the code, so blocking downstream work on it wastes the parallelism the DAG made available.
+- **Eager recomputation.** Recompute the ready-set the instant any implementer commits (this unblocks its dependents) and again whenever a review track finishes (to re-check the exit condition). Do NOT wait for the rest of the current round to complete.
+- **When a review demands a change, you decide where the fix lands — never revert or block.** Reviews still matter: you never skip them, and you never finish the branch with open review issues. But because dependents may already be in flight, handle each finding by scope:
+  - *Isolated to the reviewed task* (fix touches only that task's files): the same implementer fixes it, re-review, done. Dependents are unaffected.
+  - *Breaking change that ripples into already-dispatched dependents* (e.g. an interface the dependents consumed changed): **you, the main agent, coordinate the fix directly.** Do NOT revert the dependent lanes or unwind the DAG. Let the in-flight lanes finish, then dispatch a follow-up fix — a new task or a targeted fix subagent — that reconciles the dependents with the corrected interface. A breaking finding is a normal event to absorb, not a reason to serialize the whole plan.
+- **Concurrent commits will race — retry, never amend.** Multiple lanes commit to the same branch at once, so a commit can fail on a git lock or a non-fast-forward. That is expected: wait briefly and retry the commit, up to three attempts — the race almost always clears. Never rewrite shared history with `git commit --amend` or `git rebase` inside a lane; amending while other lanes commit scrambles the history for everyone. Always add a new commit. (Implementers get this instruction directly in `./implementer-prompt.md`.)
 - **The DAG is the truth.** Concurrent lane safety depends entirely on the plan's DAG correctly expressing dependencies. If two ready tasks would modify the same file, that is a **plan defect** — stop, report it to the user, and do not paper over it by serializing dispatch.
 
 ## Model Selection
@@ -158,33 +163,40 @@ Round 1: ready-set = {T1, T2}
 T1 lane: implementer asks "use user-level or system-level?"
 You: "User level"
 T1 implementer: implements, tests, commits, self-reviews
-T1 spec reviewer: ✅
-T1 code reviewer: ✅
-T1 done.
 
-[Eager recompute: ready-set = {T3} (T2 still in flight)]
-[Dispatch T3 lane immediately — concurrent with still-running T2 lane]
+[T1 committed → eager recompute: ready-set = {T3} (T2 still in flight)]
+[Dispatch T3 lane immediately — T1's spec + quality reviews run concurrently,
+ they do NOT block T3]
+
+T1 spec reviewer: ✅   (running alongside T3)
+T1 code reviewer: ✅
+T1 reviews passed.
 
 T2 lane (still running): implementer commits
+[T2 committed → eager recompute: ready-set = {} (T4 waits on T3); T3 still in flight]
 T2 spec reviewer: ❌ Missing progress reporting
+  → Isolated to T2's files, so the T2 implementer fixes it; no dependent affected.
 T2 implementer: fixes
 T2 spec reviewer: ✅
 T2 code reviewer: ✅
-T2 done.
+T2 reviews passed.
 
-[Eager recompute: ready-set = {} (T4 still waits on T3); T3 in flight]
+T3 lane: implementer commits
+[T3 committed → eager recompute: ready-set = {T4}]
+[Dispatch T4 lane — T3's reviews run concurrently]
+T3 reviews passed.
+T4 implementer commits; T4 reviews passed.
 
-T3 lane finishes: ✅✅ done.
-
-[Eager recompute: ready-set = {T4}]
-[Dispatch T4 lane]
-T4 done.
-
-[Ready-set empty, no lanes in flight → exit main loop]
+[Ready-set empty, no implementers or reviews in flight → exit main loop]
 [Dispatch final code-reviewer for entire implementation]
 Final reviewer: All requirements met, ready to merge
 
 Done!
+
+(Breaking-change case: if T1's spec review had instead found that T1's public
+interface must change — and T3 already consumed that interface — you would NOT
+revert T3. You let T3 finish, then dispatch a follow-up fix reconciling T3 with
+T1's corrected interface.)
 ```
 
 ## Advantages
@@ -232,10 +244,14 @@ Done!
 - Skip review loops (reviewer found issues = implementer fixes = review again)
 - Let implementer self-review replace actual review (both are needed)
 - **Start code quality review before spec compliance is ✅** (wrong order)
-- Move to next task while either review has open issues
-- Dispatch a task whose dependencies haven't all completed
+- Hold back a ready dependent because its dependency's reviews haven't finished (the *commit* unblocks dependents — reviews run concurrently and never gate downstream work)
+- Revert or unwind an already-dispatched dependent lane because a review found a breaking change (let it finish; you reconcile it with a follow-up fix)
+- Rewrite shared history with `git commit --amend` or `git rebase` inside a lane while other lanes are committing (add a new commit instead)
+- Give up on a commit after a single lock/non-fast-forward failure instead of waiting and retrying (up to three attempts)
+- Finish the branch (or run the final code review) while any task's reviews still have open issues
+- Dispatch a task whose dependencies haven't all committed their implementation
 - Allow two concurrent lanes to touch the same file (this means the plan's DAG is wrong — stop and flag it to the user)
-- Wait for the entire ready-set to finish before computing the next one (defeats DAG parallelism — recompute eagerly the moment any lane finishes)
+- Wait for the entire ready-set to finish before computing the next one (defeats DAG parallelism — recompute eagerly the moment any implementer commits)
 
 **If subagent asks questions:**
 - Answer clearly and completely

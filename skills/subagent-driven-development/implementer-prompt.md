@@ -41,6 +41,20 @@ Task tool (general-purpose):
     **While you work:** If you encounter something unexpected or unclear, **ask questions**.
     It's always OK to pause and clarify. Don't guess or make assumptions.
 
+    ## Committing
+
+    You are one of several implementers committing to the same branch at the same time.
+    Commit defensively:
+
+    - **Retry on races.** A commit can fail because another lane holds the git lock, or
+      because the branch moved under you (non-fast-forward). This is expected — it is not
+      a defect in your work. Wait a moment and retry the commit, up to three attempts.
+      The race almost always clears on its own.
+    - **Never amend or rewrite history.** Do not use `git commit --amend`, `git rebase`,
+      or any other history-rewriting command. Other lanes are committing concurrently, and
+      rewriting shared history scrambles everyone's commits. If you need to change something
+      after committing, add a new commit on top.
+
     ## Code Organization
 
     You reason best about code you can hold in context at once, and your edits are more
