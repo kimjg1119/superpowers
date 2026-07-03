@@ -118,7 +118,8 @@ Rules:
 - The set of edges across all `Depends on:` fields MUST exactly match the edges in the Mermaid diagram.
 - Tasks with overlapping file scopes MUST have a dependency edge between them (see "Dependency DAG" section above).
 - `Difficulty:` is a single sentence (or less) stating how hard the task is and, briefly, why — so the executor knows what it's walking into.
-- Decide per task whether tests — and especially TDD — are warranted, and say so explicitly in the task's steps (e.g. a "Write the failing test" step before implementation). Implementers apply TDD only when the task calls for it; don't prescribe it for experiments, scaffolding, or code that is fundamentally hard or expensive to test.
+- Decide per task whether tests are warranted, and say so explicitly in the task's steps; don't prescribe tests for experiments, scaffolding, or code that is fundamentally hard or expensive to test.
+- Only prescribe a TDD flow (a "Write the failing test" step before implementation) when the user explicitly asked for TDD in their request or spec. Otherwise, if a task warrants tests, write them as a normal step after the implementation — do not default to test-first ordering.
 - `Recommended agent:` picks the cheapest model that can do the task reliably, one of `haiku`, `sonnet`, or `opus`:
   - **haiku** — mechanical, low-judgment work: boilerplate, simple renames, wiring up a well-specified function, trivial edits.
   - **sonnet** — ordinary implementation with some judgment: typical feature tasks, moderate refactors, straightforward tests.
