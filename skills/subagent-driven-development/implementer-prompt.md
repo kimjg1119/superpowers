@@ -30,7 +30,7 @@ Task tool (general-purpose):
 
     Once you're clear on requirements:
     1. Implement exactly what the task specifies
-    2. Write tests (following TDD if task says to)
+    2. Write tests as the task specifies (follow superpowers:test-driven-development only when the task explicitly calls for TDD)
     3. Verify implementation works
     4. Commit your work
     5. Self-review (see below)

@@ -5,13 +5,13 @@ description: Use when executing implementation plans with independent tasks in t
 
 # Subagent-Driven Development
 
-Execute plan by dispatching fresh subagent per task, with two-stage review after each: spec compliance review first, then code quality review.
+Execute plan by dispatching fresh subagent per task, with two-stage review after each: spec compliance review first, then code quality review. (Trivial modification tasks are exempt from review — see DAG Execution Principles.)
 
 **Why subagents:** You delegate tasks to specialized agents with isolated context. By precisely crafting their instructions and context, you ensure they stay focused and succeed at their task. They should never inherit your session's context or history — you construct exactly what they need. This also preserves your own context for coordination work.
 
 **Core principle:** Fresh subagent per task + two-stage review (spec then quality) + **DAG ready-set parallel dispatch** = high quality, fast iteration
 
-**Continuous execution:** Do not pause to check in with your human partner between tasks. Execute all tasks from the plan without stopping. The only reasons to stop are: BLOCKED status you cannot resolve, ambiguity that genuinely prevents progress, or all tasks complete. "Should I continue?" prompts and progress summaries waste their time — they asked you to execute the plan, so execute it.
+**Continuous execution:** Do not pause to check in with your human partner between tasks. Execute all tasks from the plan without stopping. The only reasons to stop are: BLOCKED status you cannot resolve, a plan defect (e.g. two concurrently-ready tasks touching the same file), ambiguity that genuinely prevents progress, or all tasks complete. "Should I continue?" prompts and progress summaries waste their time — they asked you to execute the plan, so execute it.
 
 ## When to Use
 
@@ -47,6 +47,7 @@ digraph process {
     rankdir=TB;
 
     "Read plan, parse DAG (tasks, IDs, depends_on), create TodoWrite" [shape=box];
+    "Print one-line task summary (see below)" [shape=box];
     "Compute ready-set" [shape=box];
     "Ready-set empty AND nothing in flight (implementers + reviews)?" [shape=diamond];
     "Dispatch ALL ready tasks concurrently, one lane each" [shape=box];
@@ -60,6 +61,7 @@ digraph process {
         "Answer questions, re-dispatch" [shape=box];
         "Implementer implements, tests, commits, self-reviews" [shape=box];
         "Eager-recompute ready-set (commit unblocks dependents)" [shape=box];
+        "Trivial haiku modification task?" [shape=diamond];
         "Dispatch spec reviewer (./spec-reviewer-prompt.md)" [shape=box];
         "Spec reviewer approves?" [shape=diamond];
         "Implementer fixes spec gaps" [shape=box];
@@ -69,7 +71,8 @@ digraph process {
         "Reviews passed (mark task complete in TodoWrite)" [shape=box];
     }
 
-    "Read plan, parse DAG (tasks, IDs, depends_on), create TodoWrite" -> "Compute ready-set";
+    "Read plan, parse DAG (tasks, IDs, depends_on), create TodoWrite" -> "Print one-line task summary (see below)";
+    "Print one-line task summary (see below)" -> "Compute ready-set";
     "Compute ready-set" -> "Ready-set empty AND nothing in flight (implementers + reviews)?";
     "Ready-set empty AND nothing in flight (implementers + reviews)?" -> "Dispatch final code reviewer subagent for entire implementation" [label="yes"];
     "Ready-set empty AND nothing in flight (implementers + reviews)?" -> "Dispatch ALL ready tasks concurrently, one lane each" [label="no"];
@@ -82,7 +85,9 @@ digraph process {
 
     "Implementer implements, tests, commits, self-reviews" -> "Eager-recompute ready-set (commit unblocks dependents)";
     "Eager-recompute ready-set (commit unblocks dependents)" -> "Compute ready-set";
-    "Implementer implements, tests, commits, self-reviews" -> "Dispatch spec reviewer (./spec-reviewer-prompt.md)" [label="review track (concurrent, non-blocking)"];
+    "Implementer implements, tests, commits, self-reviews" -> "Trivial haiku modification task?" [label="review track (concurrent, non-blocking)"];
+    "Trivial haiku modification task?" -> "Reviews passed (mark task complete in TodoWrite)" [label="yes - skip both reviews"];
+    "Trivial haiku modification task?" -> "Dispatch spec reviewer (./spec-reviewer-prompt.md)" [label="no"];
 
     "Dispatch spec reviewer (./spec-reviewer-prompt.md)" -> "Spec reviewer approves?";
     "Spec reviewer approves?" -> "Implementer fixes spec gaps" [label="no"];
@@ -98,6 +103,19 @@ digraph process {
 }
 ```
 
+### Task Summary at Start
+
+After parsing the DAG and before dispatching anything, print a one-line summary of every task so your human partner can see the whole plan at a glance. One line per task, in task-ID order:
+
+```
+[T1]: aaa (depends on [], sonnet)
+[T2]: bbb (depends on [T1], haiku)
+[T3]: ccc (depends on [T1, T2], opus)
+...
+```
+
+Each line has: the task ID in brackets, the task's one-line summary, then in parentheses its `Depends on:` list and its `Recommended agent:` from the plan. Pull the summary, dependencies, and agent straight from each task's fields in the plan document. If a task has no recommended agent in the plan, choose one using the Model Selection rules below and note it.
+
 ### DAG Execution Principles
 
 - **Lanes run in parallel; each lane is serial.** Inside a single lane, the implementer → spec review → code quality review steps run in order. Across lanes, the per-task pipelines run concurrently. There is no parallelism *within* a task — only across independent tasks.
@@ -108,29 +126,27 @@ digraph process {
   - *Breaking change that ripples into already-dispatched dependents* (e.g. an interface the dependents consumed changed): **you, the main agent, coordinate the fix directly.** Do NOT revert the dependent lanes or unwind the DAG. Let the in-flight lanes finish, then dispatch a follow-up fix — a new task or a targeted fix subagent — that reconciles the dependents with the corrected interface. A breaking finding is a normal event to absorb, not a reason to serialize the whole plan.
 - **Concurrent commits will race — retry, never amend.** Multiple lanes commit to the same branch at once, so a commit can fail on a git lock or a non-fast-forward. That is expected: wait briefly and retry the commit, up to three attempts — the race almost always clears. Never rewrite shared history with `git commit --amend` or `git rebase` inside a lane; amending while other lanes commit scrambles the history for everyone. Always add a new commit. (Implementers get this instruction directly in `./implementer-prompt.md`.)
 - **The DAG is the truth.** Concurrent lane safety depends entirely on the plan's DAG correctly expressing dependencies. If two ready tasks would modify the same file, that is a **plan defect** — stop, report it to the user, and do not paper over it by serializing dispatch.
+- **Optional cleanup suggestions are still worth doing — "non-blocking" is not "ignore."** A subagent (implementer or reviewer) will sometimes report an improvement it labels non-blocking or nice-to-have: a clearer name, a small dedup, a tidier structure. Non-blocking means it doesn't stop the merge — it does NOT mean skip it. Keeping the codebase clean pays off: the small cleanup now is far cheaper than the confusion, duplication, and rework it prevents later, so the total cost goes down even if it costs a little more right now. Default to applying these suggestions (via the same implementer, in scope) rather than dropping them. Only defer one when it's genuinely out of scope or large enough to deserve its own task — and when you defer, record it as a follow-up instead of silently discarding it.
+- **Skip both reviews for trivial modification tasks.** When a task is a simple modification — typically a `haiku`-tier task that only lightly edits existing code exactly as the plan spells out — do NOT dispatch the spec reviewer or the code quality reviewer. The implementer's own self-review is enough; mark the task complete once it commits. This exception is only for genuinely mechanical, low-risk edits with a complete spec. If the task involves any real judgment, new logic, multi-file coordination, or an unclear spec, run both reviews as normal. When in doubt, review.
 
 ## Model Selection
 
-Use the least powerful model that can handle each role to conserve cost and increase speed.
+**Implementer model — follow the plan.** Each task carries a `Recommended agent:` tier (haiku | sonnet | opus) chosen when the plan was written; dispatch the implementer with that model. Only override it when the plan clearly misjudged the difficulty, and say why.
 
-**Mechanical implementation tasks** (isolated functions, clear specs, 1-2 files): use a fast, cheap model. Most implementation tasks are mechanical when the plan is well-specified.
+**If a task has no recommended agent**, pick the least powerful model that can handle it — this conserves cost and increases speed:
+- Mechanical work with a complete spec, 1-2 files (boilerplate, renames, well-specified functions) → cheap model (haiku)
+- Ordinary implementation with some judgment (typical features, multi-file integration, debugging) → standard model (sonnet)
+- Design judgment, tricky algorithms, or broad codebase understanding → most capable model (opus)
 
-**Integration and judgment tasks** (multi-file coordination, pattern matching, debugging): use a standard model.
-
-**Architecture, design, and review tasks**: use the most capable available model.
-
-**Task complexity signals:**
-- Touches 1-2 files with a complete spec → cheap model
-- Touches multiple files with integration concerns → standard model
-- Requires design judgment or broad codebase understanding → most capable model
+**Reviewer model — follow the task's designated tier.** By default, dispatch a task's spec reviewer and code quality reviewer with the **same model as the task's `Recommended agent`** — a haiku task gets a haiku reviewer, a sonnet task a sonnet reviewer, and so on. Do NOT auto-escalate reviews to the most capable model. Only reach for a stronger reviewer when there is a specific reason (e.g. the task is subtle, high-risk, or the implementer flagged doubts), and say why.
 
 ## Handling Implementer Status
 
 Implementer subagents report one of four statuses. Handle each appropriately:
 
-**DONE:** Proceed to spec compliance review.
+**DONE:** Proceed to spec compliance review (or, for a trivial task exempt from reviews, mark it complete).
 
-**DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, address them before review. If they're observations (e.g., "this file is getting large"), note them and proceed to review.
+**DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, address them before review. If they're optional cleanup suggestions (e.g., "this file is getting large", "this name could be clearer"), don't just note them and move on — apply the ones that are cheap and in scope, and only defer the rest as a recorded follow-up (see "Optional cleanup suggestions are still worth doing").
 
 **NEEDS_CONTEXT:** The implementer needs information that wasn't provided. Provide the missing context and re-dispatch.
 
@@ -148,6 +164,8 @@ Implementer subagents report one of four statuses. Handle each appropriately:
 - `./spec-reviewer-prompt.md` - Dispatch spec compliance reviewer subagent
 - `./code-quality-reviewer-prompt.md` - Dispatch code quality reviewer subagent
 
+For the final whole-implementation review, use the code-reviewer template from superpowers:requesting-code-review (BASE_SHA = where the branch started, HEAD_SHA = the final commit).
+
 ## Example Workflow
 
 ```
@@ -156,6 +174,12 @@ You: I'm using Subagent-Driven Development to execute this plan.
 [Read plan file once: docs/superpowers/plans/feature-plan.md]
 [Parse DAG: T1 (deps: []), T2 (deps: []), T3 (deps: [T1]), T4 (deps: [T2, T3])]
 [Create TodoWrite with all 4 tasks]
+
+[Print task summary]
+[T1]: Add config loader (depends on [], sonnet)
+[T2]: Add HTTP client wrapper (depends on [], sonnet)
+[T3]: Wire loader into client (depends on [T1], haiku)
+[T4]: Add retry + backoff layer (depends on [T2, T3], opus)
 
 Round 1: ready-set = {T1, T2}
 [Dispatch T1 lane and T2 lane concurrently]
@@ -183,9 +207,9 @@ T2 reviews passed.
 
 T3 lane: implementer commits
 [T3 committed → eager recompute: ready-set = {T4}]
-[Dispatch T4 lane — T3's reviews run concurrently]
-T3 reviews passed.
-T4 implementer commits; T4 reviews passed.
+[Dispatch T4 lane]
+[T3 is a trivial haiku wiring edit → skip both reviews, complete on commit]
+T4 implementer commits; T4 reviews passed (opus reviewers, matching T4's tier).
 
 [Ready-set empty, no implementers or reviews in flight → exit main loop]
 [Dispatch final code-reviewer for entire implementation]
@@ -199,43 +223,11 @@ revert T3. You let T3 finish, then dispatch a follow-up fix reconciling T3 with
 T1's corrected interface.)
 ```
 
-## Advantages
-
-**vs. Manual execution:**
-- Subagents follow TDD naturally
-- Fresh context per task (no confusion)
-- Parallel-safe (subagents don't interfere)
-- Subagent can ask questions (before AND during work)
-
-**vs. Executing Plans:**
-- Same session (no handoff)
-- Continuous progress (no waiting)
-- Review checkpoints automatic
-
-**Efficiency gains:**
-- No file reading overhead (controller provides full text)
-- Controller curates exactly what context is needed
-- Subagent gets complete information upfront
-- Questions surfaced before work begins (not after)
-
-**Quality gates:**
-- Self-review catches issues before handoff
-- Two-stage review: spec compliance, then code quality
-- Review loops ensure fixes actually work
-- Spec compliance prevents over/under-building
-- Code quality ensures implementation is well-built
-
-**Cost:**
-- More subagent invocations (implementer + 2 reviewers per task)
-- Controller does more prep work (extracting all tasks upfront)
-- Review loops add iterations
-- But catches issues early (cheaper than debugging later)
-
 ## Red Flags
 
 **Never:**
 - Start implementation on main/master branch without explicit user consent
-- Skip reviews (spec compliance OR code quality)
+- Skip reviews (spec compliance OR code quality) — **except** for trivial `haiku`-tier modification tasks, where both reviews are skipped by design (see "Skip both reviews for trivial modification tasks")
 - Proceed with unfixed issues
 - Make subagent read plan file (provide full text instead)
 - Skip scene-setting context (subagent needs to understand where task fits)
@@ -246,8 +238,7 @@ T1's corrected interface.)
 - **Start code quality review before spec compliance is ✅** (wrong order)
 - Hold back a ready dependent because its dependency's reviews haven't finished (the *commit* unblocks dependents — reviews run concurrently and never gate downstream work)
 - Revert or unwind an already-dispatched dependent lane because a review found a breaking change (let it finish; you reconcile it with a follow-up fix)
-- Rewrite shared history with `git commit --amend` or `git rebase` inside a lane while other lanes are committing (add a new commit instead)
-- Give up on a commit after a single lock/non-fast-forward failure instead of waiting and retrying (up to three attempts)
+- Amend, rebase, or otherwise rewrite shared history in a lane, or give up on a racing commit after a single failure — retry up to three times, always add new commits (implementers get the full instruction via `./implementer-prompt.md`)
 - Finish the branch (or run the final code review) while any task's reviews still have open issues
 - Dispatch a task whose dependencies haven't all committed their implementation
 - Allow two concurrent lanes to touch the same file (this means the plan's DAG is wrong — stop and flag it to the user)
@@ -277,7 +268,7 @@ T1's corrected interface.)
 - **superpowers:finishing-a-development-branch** - Complete development after all tasks
 
 **Subagents should use:**
-- **superpowers:test-driven-development** - Subagents follow TDD for each task
+- **superpowers:test-driven-development** - only when a task explicitly calls for TDD; the plan decides per task (experiments, scaffolding, and hard- or expensive-to-test code usually don't warrant it)
 
 **Alternative workflow:**
 - **superpowers:executing-plans** - Use for parallel session instead of same-session execution
