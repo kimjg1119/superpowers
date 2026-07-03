@@ -8,7 +8,7 @@
 
 **Tech Stack:** Markdown (skill files), bash (test scripts), Claude Code CLI (`claude -p` for headless testing)
 
-**Spec:** `docs/superpowers/specs/2026-04-06-worktree-rototill-design.md`
+**Spec:** `spec.md`
 
 ---
 

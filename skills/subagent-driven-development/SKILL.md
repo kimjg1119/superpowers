@@ -171,7 +171,7 @@ For the final whole-implementation review, use the code-reviewer template from s
 ```
 You: I'm using Subagent-Driven Development to execute this plan.
 
-[Read plan file once: docs/superpowers/plans/feature-plan.md]
+[Read plan file once: docs/superpowers/YYYY-MM-DD/<topic>/plan.md]
 [Parse DAG: T1 (deps: []), T2 (deps: []), T3 (deps: [T1]), T4 (deps: [T2, T3])]
 [Create TodoWrite with all 4 tasks]
 

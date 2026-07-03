@@ -25,7 +25,7 @@ You MUST create a task for each of these items and complete them in order:
 2. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria. When one option is clearly more idiomatic, decide it yourself instead of asking (see below).
 3. **Propose 2-3 approaches** — with trade-offs and your recommendation
 4. **Present design** — in sections scaled to their complexity, get user approval after each section
-5. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`. Record the choices you made autonomously and why (see below).
+5. **Write design doc** — save to `docs/superpowers/YYYY-MM-DD/<topic>/spec.md`. Record the choices you made autonomously and why (see below).
 6. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
 7. **User reviews written spec** — ask user to review the spec file before proceeding
 8. **Transition to implementation** — invoke writing-plans skill to create implementation plan
@@ -109,7 +109,7 @@ digraph brainstorming {
 
 **Documentation:**
 
-- Write the validated design (spec) to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`. Use Korean(한국어로 작성하십시오). 
+- Write the validated design (spec) to `docs/superpowers/YYYY-MM-DD/<topic>/spec.md`. Use Korean(한국어로 작성하십시오). 
   - (User preferences for spec location override this default)
 - Include a "Decisions" section that records every choice you made autonomously (rather than asking the user): what the options were, which one you chose, and the reasoning. This is where the user reviews and can override calls you made on their behalf.
 - Use elements-of-style:writing-clearly-and-concisely skill if available

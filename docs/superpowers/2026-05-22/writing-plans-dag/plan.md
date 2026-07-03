@@ -8,7 +8,7 @@
 
 **Tech Stack:** Markdown only. 스킬 파일은 `skills/<name>/SKILL.md` 형식.
 
-**Spec:** `docs/superpowers/specs/2026-05-22-writing-plans-dag-design.md`
+**Spec:** `spec.md`
 
 ---
 

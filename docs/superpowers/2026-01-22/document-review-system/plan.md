@@ -8,7 +8,7 @@
 
 **Tech Stack:** Markdown skill files, subagent dispatch via Task tool
 
-**Spec:** docs/superpowers/specs/2026-01-22-document-review-system-design.md
+**Spec:** `spec.md`
 
 ---
 
