@@ -1,21 +1,29 @@
 # Code Quality Reviewer Prompt Template
 
-Use this template when dispatching the batched code quality reviewer.
+Use this template when dispatching a code quality reviewer.
 
 **Purpose:** Verify the implementation is well-built (clean, tested, maintainable)
 
-**Dispatch once, at the end of the plan** — after every task has committed and its
-per-task spec review has passed. This is a single review over the *entire*
-implementation, not a per-task review. Use a capable model (`opus`).
+**Two occasions to dispatch it:**
+
+1. **Per-task, for hard tasks only** — right after a hard (typically opus-tier) task's
+   spec review passes, review that one task's code quality before its risk cascades into
+   dependents. Scope: that task's commit range. Use the task's tier model (`opus`).
+   Haiku/sonnet tasks get NO per-task code quality review — their code quality is covered
+   only by the end-of-plan batch below.
+2. **Batched, once at the end of the plan** — after every task has committed and its
+   per-task spec review has passed, review the *entire* implementation in one pass. Use a
+   capable model (`opus`).
 
 ```
 Task tool (general-purpose):
   Use template at requesting-code-review/code-reviewer.md
 
-  DESCRIPTION: [one-paragraph summary of the whole implementation]
-  PLAN_OR_REQUIREMENTS: [plan-file]
-  BASE_SHA: [commit where the branch started]
-  HEAD_SHA: [final commit]
+  DESCRIPTION: [per-task: task summary from the implementer's report;
+                batched: one-paragraph summary of the whole implementation]
+  PLAN_OR_REQUIREMENTS: [per-task: Task N from the plan-file; batched: the plan-file]
+  BASE_SHA: [per-task: commit before the task; batched: commit where the branch started]
+  HEAD_SHA: [per-task: the task's final commit; batched: the final commit]
 ```
 
 **Scope — code quality only.** This review focuses on *how the code is built*, not on

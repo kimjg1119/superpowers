@@ -5,11 +5,11 @@ description: Use when executing implementation plans with independent tasks in t
 
 # Subagent-Driven Development
 
-Execute plan by dispatching fresh subagent per task, with a spec compliance review after each task, then a single batched code quality review over the whole implementation at the end. (Trivial modification tasks are exempt from the per-task spec review — see DAG Execution Principles.)
+Execute plan by dispatching fresh subagent per task, with a spec compliance review after each task, then a single batched code quality review over the whole implementation at the end. Hard tasks (typically opus-tier) additionally get their own code quality review right after the task, so their risk is caught early rather than only in the final batch. (Trivial modification tasks are exempt from the per-task spec review — see DAG Execution Principles.)
 
 **Why subagents:** You delegate tasks to specialized agents with isolated context. By precisely crafting their instructions and context, you ensure they stay focused and succeed at their task. They should never inherit your session's context or history — you construct exactly what they need. This also preserves your own context for coordination work.
 
-**Core principle:** Fresh subagent per task + per-task spec review + one batched code quality review at the end + **DAG ready-set parallel dispatch** = high quality, fast iteration
+**Core principle:** Fresh subagent per task + per-task spec review (+ a per-task code quality review for hard tasks) + one batched code quality review at the end + **DAG ready-set parallel dispatch** = high quality, fast iteration
 
 **Continuous execution:** Do not pause to check in with your human partner between tasks. Execute all tasks from the plan without stopping. The only reasons to stop are: BLOCKED status you cannot resolve, a plan defect (e.g. two concurrently-ready tasks touching the same file), ambiguity that genuinely prevents progress, or all tasks complete. "Should I continue?" prompts and progress summaries waste their time — they asked you to execute the plan, so execute it.
 
@@ -36,7 +36,7 @@ digraph when_to_use {
 **vs. Executing Plans (parallel session):**
 - Same session (no context switch)
 - Fresh subagent per task (no context pollution)
-- Spec compliance review after each task; code quality reviewed in one batch at the end
+- Spec compliance review after each task (plus a per-task code quality review for hard opus-tier tasks); code quality reviewed in one batch at the end
 - DAG ready-set parallel dispatch (lanes run concurrently)
 - Faster iteration (no human-in-loop between tasks)
 
@@ -49,7 +49,7 @@ digraph process {
     "Read plan, parse DAG (tasks, IDs, depends_on), create TodoWrite" [shape=box];
     "Print one-line task summary (see below)" [shape=box];
     "Compute ready-set" [shape=box];
-    "Ready-set empty AND nothing in flight (implementers + spec reviews)?" [shape=diamond];
+    "Ready-set empty AND nothing in flight (implementers + per-task reviews)?" [shape=diamond];
     "Dispatch ALL ready tasks concurrently, one lane each" [shape=box];
     "Dispatch batched code quality reviewer for entire implementation (./code-quality-reviewer-prompt.md)" [shape=box];
     "Code quality reviewer approves?" [shape=diamond];
@@ -70,14 +70,18 @@ digraph process {
         "Dispatch spec reviewer (./spec-reviewer-prompt.md)" [shape=box];
         "Spec reviewer approves?" [shape=diamond];
         "Implementer fixes spec gaps" [shape=box];
-        "Spec review passed (mark task complete in TodoWrite)" [shape=box];
+        "Hard (opus-tier) task?" [shape=diamond];
+        "Dispatch per-task code quality reviewer (./code-quality-reviewer-prompt.md)" [shape=box];
+        "Per-task code quality reviewer approves?" [shape=diamond];
+        "Implementer fixes quality issues" [shape=box];
+        "Task reviews passed (mark task complete in TodoWrite)" [shape=box];
     }
 
     "Read plan, parse DAG (tasks, IDs, depends_on), create TodoWrite" -> "Print one-line task summary (see below)";
     "Print one-line task summary (see below)" -> "Compute ready-set";
-    "Compute ready-set" -> "Ready-set empty AND nothing in flight (implementers + spec reviews)?";
-    "Ready-set empty AND nothing in flight (implementers + spec reviews)?" -> "Dispatch batched code quality reviewer for entire implementation (./code-quality-reviewer-prompt.md)" [label="yes"];
-    "Ready-set empty AND nothing in flight (implementers + spec reviews)?" -> "Dispatch ALL ready tasks concurrently, one lane each" [label="no"];
+    "Compute ready-set" -> "Ready-set empty AND nothing in flight (implementers + per-task reviews)?";
+    "Ready-set empty AND nothing in flight (implementers + per-task reviews)?" -> "Dispatch batched code quality reviewer for entire implementation (./code-quality-reviewer-prompt.md)" [label="yes"];
+    "Ready-set empty AND nothing in flight (implementers + per-task reviews)?" -> "Dispatch ALL ready tasks concurrently, one lane each" [label="no"];
     "Dispatch ALL ready tasks concurrently, one lane each" -> "Dispatch implementer subagent (./implementer-prompt.md)";
 
     "Dispatch implementer subagent (./implementer-prompt.md)" -> "Implementer asks questions?";
@@ -87,15 +91,21 @@ digraph process {
 
     "Implementer implements, tests, commits, self-reviews" -> "Eager-recompute ready-set (commit unblocks dependents)";
     "Eager-recompute ready-set (commit unblocks dependents)" -> "Compute ready-set";
-    "Implementer implements, tests, commits, self-reviews" -> "Trivial haiku modification task?" [label="spec-review track (concurrent, non-blocking)"];
-    "Trivial haiku modification task?" -> "Spec review passed (mark task complete in TodoWrite)" [label="yes - skip spec review"];
+    "Implementer implements, tests, commits, self-reviews" -> "Trivial haiku modification task?" [label="review track (concurrent, non-blocking)"];
+    "Trivial haiku modification task?" -> "Task reviews passed (mark task complete in TodoWrite)" [label="yes - skip reviews"];
     "Trivial haiku modification task?" -> "Dispatch spec reviewer (./spec-reviewer-prompt.md)" [label="no"];
 
     "Dispatch spec reviewer (./spec-reviewer-prompt.md)" -> "Spec reviewer approves?";
     "Spec reviewer approves?" -> "Implementer fixes spec gaps" [label="no"];
     "Implementer fixes spec gaps" -> "Dispatch spec reviewer (./spec-reviewer-prompt.md)";
-    "Spec reviewer approves?" -> "Spec review passed (mark task complete in TodoWrite)" [label="yes"];
-    "Spec review passed (mark task complete in TodoWrite)" -> "Compute ready-set" [label="re-check exit condition"];
+    "Spec reviewer approves?" -> "Hard (opus-tier) task?" [label="yes"];
+    "Hard (opus-tier) task?" -> "Task reviews passed (mark task complete in TodoWrite)" [label="no - code quality batched to end"];
+    "Hard (opus-tier) task?" -> "Dispatch per-task code quality reviewer (./code-quality-reviewer-prompt.md)" [label="yes"];
+    "Dispatch per-task code quality reviewer (./code-quality-reviewer-prompt.md)" -> "Per-task code quality reviewer approves?";
+    "Per-task code quality reviewer approves?" -> "Implementer fixes quality issues" [label="no"];
+    "Implementer fixes quality issues" -> "Dispatch per-task code quality reviewer (./code-quality-reviewer-prompt.md)";
+    "Per-task code quality reviewer approves?" -> "Task reviews passed (mark task complete in TodoWrite)" [label="yes"];
+    "Task reviews passed (mark task complete in TodoWrite)" -> "Compute ready-set" [label="re-check exit condition"];
 
     "Dispatch batched code quality reviewer for entire implementation (./code-quality-reviewer-prompt.md)" -> "Code quality reviewer approves?";
     "Code quality reviewer approves?" -> "Dispatch fix subagent for quality issues, re-review" [label="no"];
@@ -123,8 +133,8 @@ Each line has: the task ID in brackets, the task's one-line summary, then in par
 
 ### DAG Execution Principles
 
-- **Lanes run in parallel; each lane is serial.** Inside a single lane, the implementer → spec review steps run in order. Code quality is not reviewed per lane — it runs once at the end over the whole implementation. Across lanes, the per-task pipelines run concurrently. There is no parallelism *within* a task — only across independent tasks.
-- **Implementation commit unblocks dependents — the spec review does not gate them.** Spec review is not on the critical path. The instant an implementer commits, treat its task as implementation-complete: recompute the ready-set and dispatch any newly-unblocked dependents immediately, *while that task's spec review runs concurrently*. Dependents build on the committed code, not on the reviewed-and-blessed code. This is the main lever for speed — a passing review rarely changes the code, so blocking downstream work on it wastes the parallelism the DAG made available.
+- **Lanes run in parallel; each lane is serial.** Inside a single lane, the implementer → spec review steps run in order, followed by a per-task code quality review for hard (opus-tier) tasks only. For haiku/sonnet tasks, code quality is not reviewed per lane — it runs once at the end over the whole implementation. Across lanes, the per-task pipelines run concurrently. There is no parallelism *within* a task — only across independent tasks.
+- **Implementation commit unblocks dependents — the per-task reviews do not gate them.** Neither the spec review nor a hard task's per-task code quality review is on the critical path. The instant an implementer commits, treat its task as implementation-complete: recompute the ready-set and dispatch any newly-unblocked dependents immediately, *while that task's spec review (and, for hard tasks, its per-task code quality review) runs concurrently*. Dependents build on the committed code, not on the reviewed-and-blessed code. This is the main lever for speed — a passing review rarely changes the code, so blocking downstream work on it wastes the parallelism the DAG made available.
 - **Eager recomputation.** Recompute the ready-set the instant any implementer commits (this unblocks its dependents) and again whenever a review track finishes (to re-check the exit condition). Do NOT wait for the rest of the current round to complete.
 - **When a review demands a change, you decide where the fix lands — never revert or block.** Reviews still matter: you never skip them, and you never finish the branch with open review issues. But because dependents may already be in flight, handle each finding by scope:
   - *Isolated to the reviewed task* (fix touches only that task's files): the same implementer fixes it, re-review, done. Dependents are unaffected.
@@ -143,7 +153,7 @@ Each line has: the task ID in brackets, the task's one-line summary, then in par
 - Ordinary implementation with some judgment (typical features, multi-file integration, debugging) → standard model (sonnet)
 - Design judgment, tricky algorithms, or broad codebase understanding → most capable model (opus)
 
-**Per-task spec reviewer model — follow the task's designated tier.** By default, dispatch a task's spec reviewer with the **same model as the task's `Recommended agent`** — a haiku task gets a haiku spec reviewer, a sonnet task a sonnet spec reviewer, and so on. Do NOT auto-escalate the spec review to the most capable model. Only reach for a stronger reviewer when there is a specific reason (e.g. the task is subtle, high-risk, or the implementer flagged doubts), and say why.
+**Per-task reviewer model — follow the task's designated tier.** By default, dispatch a task's spec reviewer — and, for hard opus-tier tasks, its per-task code quality reviewer — with the **same model as the task's `Recommended agent`**. A haiku task gets a haiku spec reviewer; an opus task gets opus reviewers; and so on. Do NOT auto-escalate a per-task review to the most capable model. Only reach for a stronger reviewer when there is a specific reason (e.g. the task is subtle, high-risk, or the implementer flagged doubts), and say why.
 
 **End-of-plan reviewer model — use a capable model.** The batched code quality review and the final whole-implementation review each cover the entire implementation across every task, so dispatch both with the most capable model (`opus`) by default. These are the last quality gates before merge; don't cut them short with a cheap model.
 
@@ -151,7 +161,7 @@ Each line has: the task ID in brackets, the task's one-line summary, then in par
 
 Implementer subagents report one of four statuses. Handle each appropriately:
 
-**DONE:** Proceed to spec compliance review (or, for a trivial task exempt from the spec review, mark it complete). Code quality is not reviewed here — it is batched to the end of the plan.
+**DONE:** Proceed to spec compliance review (or, for a trivial task exempt from the spec review, mark it complete). After the spec review passes, run a per-task code quality review only if the task is hard (opus-tier); haiku/sonnet tasks defer code quality entirely to the end-of-plan batch.
 
 **DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, address them before review. If they're optional cleanup suggestions (e.g., "this file is getting large", "this name could be clearer"), don't just note them and move on — apply the ones that are cheap and in scope, and only defer the rest as a recorded follow-up (see "Optional cleanup suggestions are still worth doing").
 
@@ -169,7 +179,7 @@ Implementer subagents report one of four statuses. Handle each appropriately:
 
 - `./implementer-prompt.md` - Dispatch implementer subagent (per task)
 - `./spec-reviewer-prompt.md` - Dispatch spec compliance reviewer subagent (per task)
-- `./code-quality-reviewer-prompt.md` - Dispatch the batched code quality reviewer once at the end, over the entire implementation (BASE_SHA = where the branch started, HEAD_SHA = the final commit)
+- `./code-quality-reviewer-prompt.md` - Dispatch the code quality reviewer. Used twice: per-task for hard opus-tier tasks (right after the task's spec review passes, scoped to that task's commits), and once at the end over the entire implementation (BASE_SHA = where the branch started, HEAD_SHA = the final commit)
 
 After the batched code quality review passes, run the final whole-implementation review using the code-reviewer template from superpowers:requesting-code-review (BASE_SHA = where the branch started, HEAD_SHA = the final commit). **Carve code quality out of this final review to keep the two roles distinct:** the code quality review above already covers cleanliness, tests, maintainability, and file organization. Scope the final review to the whole-implementation concerns that per-task reviews can't see — end-to-end plan/requirements completeness, how the tasks integrate with each other, architecture soundness, production readiness, and the merge verdict. Tell the reviewer not to redo the line-by-line code-quality and testing audit.
 
@@ -215,8 +225,11 @@ T3 lane: implementer commits
 [Dispatch T4 lane]
 [T3 is a trivial haiku wiring edit → skip the spec review, complete on commit]
 T4 implementer commits; T4 spec reviewer (opus, matching T4's tier): ✅
+[T4 is opus-tier (hard) → also run a per-task code quality review now]
+T4 per-task code quality reviewer (opus): ✅
+T4 reviews passed.
 
-[Ready-set empty, no implementers or spec reviews in flight → exit main loop]
+[Ready-set empty, no implementers or per-task reviews in flight → exit main loop]
 
 [Dispatch batched code quality reviewer over the whole implementation (opus)]
 Code quality reviewer: ⚠ config loader and client wrapper duplicate a small helper
@@ -248,11 +261,11 @@ T1's corrected interface.)
 - Accept "close enough" on spec compliance (spec reviewer found issues = not done)
 - Skip review loops (reviewer found issues = fix = review again)
 - Let implementer self-review replace actual review (both are needed)
-- **Run code quality review per task** (code quality is reviewed once, batched over the whole implementation at the end — not per lane)
+- **Run a per-task code quality review for a non-hard task** (only hard opus-tier tasks get one; haiku/sonnet tasks' code quality is covered solely by the end-of-plan batch)
 - Hold back a ready dependent because its dependency's spec review hasn't finished (the *commit* unblocks dependents — the spec review runs concurrently and never gates downstream work)
 - Revert or unwind an already-dispatched dependent lane because a review found a breaking change (let it finish; you reconcile it with a follow-up fix)
 - Amend, rebase, or otherwise rewrite shared history in a lane, or give up on a racing commit after a single failure — retry up to three times, always add new commits (implementers get the full instruction via `./implementer-prompt.md`)
-- Finish the branch while any task's spec review, the batched code quality review, or the final whole-implementation review still has open issues
+- Finish the branch while any task's spec review, a hard task's per-task code quality review, the batched code quality review, or the final whole-implementation review still has open issues
 - Dispatch a task whose dependencies haven't all committed their implementation
 - Allow two concurrent lanes to touch the same file (this means the plan's DAG is wrong — stop and flag it to the user)
 - Wait for the entire ready-set to finish before computing the next one (defeats DAG parallelism — recompute eagerly the moment any implementer commits)
