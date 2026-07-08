@@ -1,6 +1,6 @@
 ---
 name: brainstorming
-description: "You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior. Only Exception: Your model is Fable 5 (in this case just skip this). Explores user intent, requirements and design before implementation."
+description: "You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior. Only Exception: Your model is Fable 5 (in this case use superpowers:brainstorming-fable instead). Explores user intent, requirements and design before implementation."
 ---
 
 # Brainstorming Ideas Into Designs

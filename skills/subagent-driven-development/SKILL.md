@@ -1,6 +1,6 @@
 ---
 name: subagent-driven-development
-description: Use when executing implementation plans with independent tasks in the current session
+description: Use when executing implementation plans with independent tasks in the current session. Exception - if your model (the main agent) is Fable 5, use superpowers:subagent-driven-development-fable instead.
 ---
 
 # Subagent-Driven Development
